@@ -1,6 +1,6 @@
 # Design
 
-Shardflow is built around a small continuity model:
+Agent Batch Harness is built around a small continuity model:
 
 1. A work item list describes the real units of work.
 2. A manifest groups those items into shards and records status.
@@ -13,7 +13,8 @@ Shardflow is built around a small continuity model:
 
 - `pending`: ready to run.
 - `running`: currently being executed by a runner.
-- `completed`: runner exited successfully or the parent marked it complete.
+- `succeeded`: runner exited successfully without a verifier.
+- `verified`: runner and configured verifier both exited successfully.
 - `failed`: runner exited unsuccessfully or verification failed.
 - `skipped`: intentionally not run.
 
@@ -27,14 +28,14 @@ codex exec --cd <workdir> --skip-git-repo-check - < <prompt>
 
 The `dry-run` runner is included for tests, demos, and planning. The generic
 `shell` runner passes the prompt on standard input and exports shard metadata
-through `SHARDFLOW_SHARD_ID`, `SHARDFLOW_PROMPT`, `SHARDFLOW_WORKDIR`, and
-`SHARDFLOW_LOG`.
+through `AGENT_BATCH_SHARD_ID`, `AGENT_BATCH_PROMPT`, `AGENT_BATCH_WORKDIR`, and
+`AGENT_BATCH_LOG`. `AGENT_BATCH_ATTEMPT` identifies the current claim attempt.
 
 Future runners should implement the same contract: read one prompt, write one
 log, return an exit code, and leave shard status to the harness.
 
 An optional verifier command runs only after a successful runner. It uses the
-same working directory and `SHARDFLOW_*` environment values. Its output is
+same working directory and `AGENT_BATCH_*` environment values. Its output is
 appended to the shard log, and a non-zero exit code changes the final status to
 `failed`.
 
@@ -43,8 +44,12 @@ appended to the shard log, and a non-zero exit code changes the final status to
 Every manifest mutation takes an advisory lock on `manifest.tsv.lock` and
 replaces the TSV atomically. Before a real runner starts, it claims the shard
 inside that lock by transitioning an eligible status to `running`. This makes
-separate Shardflow processes safe to use against one manifest, provided their
+separate Agent Batch Harness processes safe to use against one manifest, provided their
 shards write to disjoint project paths.
+
+Each claim records `started_at` and increments `attempt`. The `reclaim` command
+changes sufficiently old `running` claims to `failed`; it does not guess whether
+a recent process is alive.
 
 The CLI can launch a bounded number of those processes with `run --jobs N`.
 The lock provides the cross-process coordination; the bounded executor only

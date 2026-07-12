@@ -1,6 +1,6 @@
-# Shardflow
+# Agent Batch Harness
 
-<p align="center"><strong>Split long agent work. Verify every shard. Resume without losing context.</strong></p>
+<p align="center"><strong>Split long agent work. Record every run. Verify before trust.</strong></p>
 
 <p align="center">
   <strong>English</strong> · <a href="README.ko.md">한국어</a>
@@ -8,15 +8,15 @@
 
 <p align="center"><code>Python 3.11+</code> · <code>Linux</code> · <code>macOS</code> · <code>Windows</code> · <code>MIT</code></p>
 
-Shardflow is a small, file-first harness for sharded, resumable agent workflows.
+Agent Batch Harness is a small, file-first harness for sharded, resumable agent workflows.
 
 It helps you take work that is too large, too long, or too context-heavy for a
 single agent run and turn it into scoped shards with prompts, logs, expected
 outputs, verification, and a clear resume path.
 
-Shardflow does not try to replace an agent runtime. It sits one layer above one:
+Agent Batch Harness does not try to replace an agent runtime. It sits one layer above one:
 you keep using Codex, Claude Code, Gemini CLI, a custom agent runner, or a human
-review loop. Shardflow gives those runs a durable shape.
+review loop. Agent Batch Harness gives those runs a durable shape.
 
 ```text
 large goal
@@ -31,7 +31,7 @@ items.tsv  ->  _batches/manifest.tsv  ->  shard prompts
                                   outputs + qc + resume
 ```
 
-## Why Shardflow Exists
+## Why Agent Batch Harness Exists
 
 Long agent workflows fail in predictable ways:
 
@@ -42,7 +42,7 @@ Long agent workflows fail in predictable ways:
 - Logs exist, but there is no machine-readable manifest.
 - Parent status files get edited by workers before their output is verified.
 
-Shardflow turns those failure modes into a simple operating model:
+Agent Batch Harness turns those failure modes into a simple operating model:
 
 - **Shard the work** into independent item ranges.
 - **Render exact prompts** for each shard.
@@ -56,7 +56,7 @@ plain logs, and explicit status transitions.
 
 ## What It Is
 
-Shardflow is:
+Agent Batch Harness is:
 
 - a Python CLI;
 - a project layout convention;
@@ -65,7 +65,7 @@ Shardflow is:
 - a verification layer for expected files and QC JSON;
 - a continuity pattern for long-running work.
 
-Shardflow is not:
+Agent Batch Harness is not:
 
 - a model provider;
 - an autonomous planner;
@@ -101,8 +101,8 @@ projects, or extended without adopting a full orchestration platform.
 ## Repository Layout
 
 ```text
-shardflow/
-  src/shardflow/
+agent-batch-harness/
+  src/agent_batch_harness/
     cli.py                  # command-line interface
     core.py                 # manifest, prompt, runner, verification logic
 
@@ -144,20 +144,20 @@ Create an isolated environment and install the project:
 python3 -m venv .venv
 . .venv/bin/activate
 python3 -m pip install -e .
-shardflow --help
+agent-batch --help
 ```
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`; commands
 after activation are otherwise the same. To install a built wheel instead of a
-checkout, run `python -m pip install path/to/shardflow-*.whl`.
+checkout, run `python -m pip install path/to/agent-batch-harness-*.whl`.
 
 Without installing:
 
 ```bash
-PYTHONPATH=src python3 -m shardflow --help
+PYTHONPATH=src python3 -m agent_batch_harness --help
 ```
 
-Shardflow currently has no runtime dependency outside the Python standard
+Agent Batch Harness currently has no runtime dependency outside the Python standard
 library. It targets Python 3.11+ on Linux, macOS, and Windows. Manifest locking
 uses `flock` on POSIX and `msvcrt` byte-range locking on Windows.
 
@@ -171,7 +171,7 @@ differences across operating systems.
 | Windows, Python 3.12 | Editable install or wheel | CI matrix configured |
 | Containers and CI workers | Install the same pure-Python wheel | Depends on the external runner image |
 
-Shardflow itself is pure Python, but the agent CLI selected by `--runner` is an
+Agent Batch Harness itself is pure Python, but the agent CLI selected by `--runner` is an
 external prerequisite. Air-gapped environments must preload both the wheel and
 the chosen agent runner.
 
@@ -182,21 +182,21 @@ Run the bundled tiny example:
 ```bash
 cd examples/tiny-edit
 
-PYTHONPATH=../../src python3 -m shardflow plan \
+PYTHONPATH=../../src python3 -m agent_batch_harness plan \
   --items items.tsv \
   --batch-dir _batches \
   --batch-size 2
 
-PYTHONPATH=../../src python3 -m shardflow build-prompts \
+PYTHONPATH=../../src python3 -m agent_batch_harness build-prompts \
   --items items.tsv \
   --manifest _batches/manifest.tsv \
   --template prompt-template.md \
   --workdir .
 
-PYTHONPATH=../../src python3 -m shardflow resume \
+PYTHONPATH=../../src python3 -m agent_batch_harness resume \
   --manifest _batches/manifest.tsv
 
-PYTHONPATH=../../src python3 -m shardflow verify \
+PYTHONPATH=../../src python3 -m agent_batch_harness verify \
   --items items.tsv \
   --workdir .
 ```
@@ -210,7 +210,7 @@ shard_001    pending    _batches/shard_001.prompt.md    _batches/run-logs/shard_
 Use a dry run to exercise the runner path without invoking an agent:
 
 ```bash
-PYTHONPATH=../../src python3 -m shardflow run \
+PYTHONPATH=../../src python3 -m agent_batch_harness run \
   --manifest _batches/manifest.tsv \
   --runner dry-run \
   --workdir . \
@@ -220,7 +220,7 @@ PYTHONPATH=../../src python3 -m shardflow run \
 Run bounded parallel work when every selected shard has disjoint output paths:
 
 ```bash
-PYTHONPATH=../../src python3 -m shardflow run \
+PYTHONPATH=../../src python3 -m agent_batch_harness run \
   --manifest _batches/manifest.tsv \
   --runner codex \
   --workdir . \
@@ -231,20 +231,20 @@ Bound a runner and its verifier with a timeout. A timeout exits with code `124`
 and marks the claimed shard `failed`:
 
 ```bash
-shardflow run --manifest _batches/manifest.tsv --runner codex --timeout 900
+agent-batch run --manifest _batches/manifest.tsv --runner codex --timeout 900
 ```
 
 Run a verifier after every successful shard. The verifier runs in the work
-directory and receives the same `SHARDFLOW_*` environment variables as the
+directory and receives the same `AGENT_BATCH_*` environment variables as the
 runner. A non-zero verifier result marks that shard `failed` and appends its
 output to the shard log.
 
 ```bash
-PYTHONPATH=../../src python3 -m shardflow run \
+PYTHONPATH=../../src python3 -m agent_batch_harness run \
   --manifest _batches/manifest.tsv \
   --runner shell \
   --shell-command 'your-agent-cli run --stdin' \
-  --verify-command 'python3 -m shardflow verify --items items.tsv --manifest _batches/manifest.tsv --shard "$SHARDFLOW_SHARD_ID" --workdir .' \
+  --verify-command 'python3 -m agent_batch_harness verify --items items.tsv --manifest _batches/manifest.tsv --shard "$AGENT_BATCH_SHARD_ID" --workdir .' \
   --workdir . \
   --jobs 3
 ```
@@ -252,7 +252,7 @@ PYTHONPATH=../../src python3 -m shardflow run \
 Run a shard with Codex:
 
 ```bash
-PYTHONPATH=../../src python3 -m shardflow run \
+PYTHONPATH=../../src python3 -m agent_batch_harness run \
   --manifest _batches/manifest.tsv \
   --runner codex \
   --workdir . \
@@ -261,11 +261,11 @@ PYTHONPATH=../../src python3 -m shardflow run \
 
 Run a shard through another CLI with the generic shell runner. The command
 receives the rendered prompt on standard input. It also receives
-`SHARDFLOW_SHARD_ID`, `SHARDFLOW_PROMPT`, `SHARDFLOW_WORKDIR`, and
-`SHARDFLOW_LOG` in its environment.
+`AGENT_BATCH_SHARD_ID`, `AGENT_BATCH_PROMPT`, `AGENT_BATCH_WORKDIR`, and
+`AGENT_BATCH_LOG` in its environment.
 
 ```bash
-PYTHONPATH=../../src python3 -m shardflow run \
+PYTHONPATH=../../src python3 -m agent_batch_harness run \
   --manifest _batches/manifest.tsv \
   --runner shell \
   --shell-command 'your-agent-cli run --stdin' \
@@ -304,24 +304,32 @@ item or rebuilding the manifest intentionally.
 
 ## The Manifest
 
-`shardflow plan` writes `_batches/manifest.tsv`.
+`agent-batch plan` writes `_batches/manifest.tsv`.
 
 ```tsv
-shard_id	prompt_path	item_count	first_item	last_item	status	log_path
-shard_001	_batches/shard_001.prompt.md	2	alpha	beta	pending	_batches/run-logs/shard_001.log
-shard_002	_batches/shard_002.prompt.md	1	gamma	gamma	pending	_batches/run-logs/shard_002.log
+shard_id	prompt_path	item_count	first_item	last_item	status	log_path	started_at	attempt
+shard_001	_batches/shard_001.prompt.md	2	alpha	beta	pending	_batches/run-logs/shard_001.log		0
+shard_002	_batches/shard_002.prompt.md	1	gamma	gamma	pending	_batches/run-logs/shard_002.log		0
 ```
 
 Shard status values:
 
 - `pending`: ready to run.
 - `running`: currently being executed.
-- `completed`: runner succeeded or a verifier accepted it.
+- `succeeded`: the runner exited successfully without a verifier.
+- `verified`: the runner and configured verifier both exited successfully.
 - `failed`: runner or verification failed.
 - `skipped`: intentionally not run.
 
 The manifest is deliberately editable. Humans should be able to inspect and
 repair it without a database, service, or special UI.
+
+`started_at` records an active claim in UTC and `attempt` increments on every
+claim. Recover an abandoned run after a chosen safety window with:
+
+```bash
+agent-batch reclaim --manifest _batches/manifest.tsv --older-than 3600
+```
 
 ## Prompt Templates
 
@@ -362,9 +370,9 @@ Rendered item blocks look like this:
 
 1. Create `items.tsv`.
 2. Create `prompt-template.md`.
-3. Run `shardflow plan`.
-4. Run `shardflow build-prompts`.
-5. Run `shardflow resume` to confirm the next shard.
+3. Run `agent-batch plan`.
+4. Run `agent-batch build-prompts`.
+5. Run `agent-batch resume` to confirm the next shard.
 6. Run one shard.
 7. Verify outputs.
 8. Mark or rerun as needed.
@@ -385,7 +393,7 @@ update them after verification.
 
 ## Parent/Worker Contract
 
-Shardflow works best when responsibilities are separated.
+Agent Batch Harness works best when responsibilities are separated.
 
 Parent orchestrator:
 
@@ -417,20 +425,21 @@ Reviewer:
 Basic verification:
 
 ```bash
-shardflow verify --items items.tsv --workdir .
+agent-batch verify --items items.tsv --workdir .
 ```
 
 By default, verification checks:
 
 - every `output` file exists;
+- every `output` file is non-empty UTF-8 text;
 - every `qc` file exists;
-- every `qc` file parses as JSON;
+- every `qc` file is a JSON object containing `"pass": true`;
 - output files do not contain `TODO`, `TBD`, `placeholder`, or `FIXME`.
 
 Add more forbidden patterns:
 
 ```bash
-shardflow verify \
+agent-batch verify \
   --items items.tsv \
   --workdir . \
   --forbid 'DO NOT COMMIT' \
@@ -440,13 +449,13 @@ shardflow verify \
 Skip JSON checks when your workflow has no QC files:
 
 ```bash
-shardflow verify --items items.tsv --workdir . --no-json
+agent-batch verify --items items.tsv --workdir . --no-json
 ```
 
 Verify exactly one shard before accepting or retrying it:
 
 ```bash
-shardflow verify \
+agent-batch verify \
   --items items.tsv \
   --manifest _batches/manifest.tsv \
   --shard shard_002 \
@@ -458,13 +467,13 @@ shardflow verify \
 Find the next shard:
 
 ```bash
-shardflow resume --manifest _batches/manifest.tsv
+agent-batch resume --manifest _batches/manifest.tsv
 ```
 
 Mark a shard manually:
 
 ```bash
-shardflow mark \
+agent-batch mark \
   --manifest _batches/manifest.tsv \
   --shard shard_003 \
   --status failed
@@ -480,7 +489,7 @@ Common recovery patterns:
 
 ## Parallel Work
 
-Shardflow is compatible with parallel work, but it does not hide the risk.
+Agent Batch Harness is compatible with parallel work, but it does not hide the risk.
 
 Parallelism is appropriate when:
 
@@ -496,7 +505,7 @@ Parallelism is risky when:
 - outputs need a single global style pass;
 - external services impose rate or concurrency limits.
 
-`shardflow run --jobs N` starts up to `N` selected shard processes at once.
+`agent-batch run --jobs N` starts up to `N` selected shard processes at once.
 With the default `--jobs 1`, it stops after the first failure; add
 `--continue-on-failure` to keep processing later shards. Parallel mode starts
 the selected work set immediately, so one failure cannot cancel already-running
@@ -534,11 +543,11 @@ Agent tools increasingly support:
 That makes the missing piece less about "can an agent do work?" and more about
 "can we make long work auditable, resumable, and safe to parallelize?"
 
-Shardflow focuses on that missing layer.
+Agent Batch Harness focuses on that missing layer.
 
 ## Open-Source Positioning
 
-Shardflow is a good open-source candidate because it is:
+Agent Batch Harness is a good open-source candidate because it is:
 
 - **small**: the initial implementation is standard-library Python;
 - **portable**: TSV, Markdown, JSON, and logs work everywhere;
@@ -549,7 +558,7 @@ Shardflow is a good open-source candidate because it is:
 
 The best public framing is:
 
-> Shardflow is a continuity harness for agentic work: split large tasks into
+> Agent Batch Harness is a continuity harness for agentic work: split large tasks into
 > verifiable shards, run them through your agent CLI, and resume from a manifest.
 
 ## Roadmap
@@ -580,7 +589,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests
 Run CLI help:
 
 ```bash
-PYTHONPATH=src python3 -m shardflow --help
+PYTHONPATH=src python3 -m agent_batch_harness --help
 ```
 
 Run the local publication gate:
@@ -603,7 +612,7 @@ Check the example:
 
 ```bash
 cd examples/tiny-edit
-PYTHONPATH=../../src python3 -m shardflow verify --items items.tsv --workdir .
+PYTHONPATH=../../src python3 -m agent_batch_harness verify --items items.tsv --workdir .
 ```
 
 ## License

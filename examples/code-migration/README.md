@@ -5,8 +5,8 @@ does not ship completed outputs; run `plan` and `build-prompts`, then use a shel
 or agent runner that writes the declared output and QC paths.
 
 ```bash
-shardflow plan --items items.tsv --batch-dir _batches --batch-size 1
-shardflow build-prompts --items items.tsv --manifest _batches/manifest.tsv --template prompt-template.md --workdir .
+agent-batch plan --items items.tsv --batch-dir _batches --batch-size 1
+agent-batch build-prompts --items items.tsv --manifest _batches/manifest.tsv --template prompt-template.md --workdir .
 ```
 
 Keep shared exports, formatting, and broad test changes in a parent closeout

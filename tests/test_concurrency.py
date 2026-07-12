@@ -7,13 +7,15 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from shardflow.core import (
+from agent_batch_harness.core import (
     claim_shard,
     plan_shards,
     read_manifest,
+    reclaim_stale_shards,
     run_logged_process,
     run_shard,
     update_manifest_status,
@@ -46,6 +48,28 @@ class ConcurrencyTest(unittest.TestCase):
             with ThreadPoolExecutor(max_workers=8) as executor:
                 claims = list(executor.map(lambda _: claim_shard(manifest, "shard_001", {"pending"}), range(8)))
             self.assertEqual(sum(claim is not None for claim in claims), 1)
+            claimed = next(claim for claim in claims if claim is not None)
+            self.assertEqual(claimed.attempt, 1)
+            self.assertTrue(claimed.started_at)
+
+    def test_reclaim_marks_only_stale_running_shards_failed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            manifest, shards = make_project(Path(tmp), 2)
+            claim_shard(manifest, shards[0].shard_id, {"pending"})
+            claim_shard(manifest, shards[1].shard_id, {"pending"})
+            rows = manifest.read_text(encoding="utf-8").splitlines()
+            stale = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+            fields = rows[1].split("\t")
+            fields[-2] = stale
+            rows[1] = "\t".join(fields)
+            manifest.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+            reclaimed = reclaim_stale_shards(manifest, 3600)
+
+            self.assertEqual(reclaimed, ["shard_001"])
+            current = read_manifest(manifest)
+            self.assertEqual([shard.status for shard in current], ["failed", "running"])
+            self.assertEqual(current[0].started_at, "")
 
     def test_parallel_status_updates_preserve_every_row(self) -> None:
         with TemporaryDirectory() as tmp:

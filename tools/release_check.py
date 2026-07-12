@@ -52,7 +52,7 @@ def main() -> int:
 
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     project = metadata.get("project", {})
-    if project.get("license", {}).get("text") != "MIT":
+    if project.get("license") != "MIT":
         errors.append("pyproject.toml must declare the MIT license")
     if project.get("dependencies"):
         errors.append("runtime dependencies require explicit publication review")

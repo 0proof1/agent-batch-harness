@@ -10,6 +10,7 @@ from .core import (
     next_shard,
     plan_shards,
     read_manifest,
+    reclaim_stale_shards,
     run_shard,
     update_manifest_status,
     verify_outputs,
@@ -58,6 +59,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         print("no shards selected")
         return 0
     allowed_statuses = set(args.status)
+
     def run_one(shard) -> int:
         print(f"running {shard.shard_id} with {args.runner}")
         if (args.dry_run or args.runner == "dry-run") and args.mark_dry_run:
@@ -78,13 +80,20 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         if args.dry_run or args.runner == "dry-run":
             if args.mark_dry_run:
-                update_manifest_status(args.manifest, shard.shard_id, "completed")
+                update_manifest_status(args.manifest, shard.shard_id, "succeeded")
         return code
+
+    def run_one_safely(shard) -> int:
+        try:
+            return run_one(shard)
+        except Exception as exc:
+            print(f"failed {shard.shard_id}: {type(exc).__name__}: {exc}")
+            return 1
 
     if args.jobs == 1:
         exit_code = 0
         for shard in selected:
-            code = run_one(shard)
+            code = run_one_safely(shard)
             if code != 0:
                 exit_code = code
                 if not args.continue_on_failure:
@@ -93,7 +102,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     exit_code = 0
     with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-        futures = {executor.submit(run_one, shard): shard for shard in selected}
+        futures = {executor.submit(run_one_safely, shard): shard for shard in selected}
         for future in as_completed(futures):
             shard = futures[future]
             code = future.result()
@@ -101,6 +110,16 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"failed {shard.shard_id} with exit code {code}")
                 exit_code = code
     return exit_code
+
+
+def cmd_reclaim(args: argparse.Namespace) -> int:
+    reclaimed = reclaim_stale_shards(args.manifest, args.older_than)
+    if not reclaimed:
+        print("no stale running shards found")
+        return 0
+    for shard_id in reclaimed:
+        print(f"reclaimed {shard_id} as failed")
+    return 0
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -131,7 +150,7 @@ def cmd_mark(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="shardflow")
+    parser = argparse.ArgumentParser(prog="agent-batch")
     sub = parser.add_subparsers(dest="command", required=True)
 
     plan = sub.add_parser("plan", help="create _batches/manifest.tsv from an items TSV")
@@ -180,8 +199,17 @@ def build_parser() -> argparse.ArgumentParser:
     mark = sub.add_parser("mark", help="manually update a shard status")
     mark.add_argument("--manifest", type=Path, required=True)
     mark.add_argument("--shard", required=True)
-    mark.add_argument("--status", choices=["pending", "running", "completed", "failed", "skipped"], required=True)
+    mark.add_argument(
+        "--status",
+        choices=["pending", "succeeded", "verified", "failed", "skipped"],
+        required=True,
+    )
     mark.set_defaults(func=cmd_mark)
+
+    reclaim = sub.add_parser("reclaim", help="mark stale running shards failed so they can be resumed")
+    reclaim.add_argument("--manifest", type=Path, required=True)
+    reclaim.add_argument("--older-than", type=float, required=True, help="minimum running age in seconds")
+    reclaim.set_defaults(func=cmd_reclaim)
 
     return parser
 
@@ -195,4 +223,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("run --jobs must be at least 1")
     if args.command == "run" and args.timeout is not None and args.timeout <= 0:
         parser.error("run --timeout must be greater than 0")
+    if args.command == "reclaim" and args.older_than <= 0:
+        parser.error("reclaim --older-than must be greater than 0")
     return args.func(args)

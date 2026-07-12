@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from shardflow.core import (
+from agent_batch_harness.core import (
     Shard,
     chunk,
     items_for_shard,
@@ -37,6 +37,18 @@ class ValidationTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(ValueError, "duplicate item_id"):
+                read_items(path)
+
+    def test_conflicting_output_and_qc_paths_are_rejected(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.tsv"
+            path.write_text(
+                "item_id\tsource\toutput\tqc\n"
+                "a\tin/a\tshared/result\tqc/a\n"
+                "b\tin/b\tout/b\tshared/./result\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "conflicting destination path"):
                 read_items(path)
 
     def test_manifest_requires_all_fields(self) -> None:

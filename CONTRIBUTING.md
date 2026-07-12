@@ -1,6 +1,6 @@
-# Contributing to Shardflow
+# Contributing to Agent Batch Harness
 
-Shardflow accepts focused changes that preserve its file-first, agent-neutral
+Agent Batch Harness accepts focused changes that preserve its file-first, agent-neutral
 design. Discuss broad changes in an issue before implementing them.
 
 ## Development

@@ -1,2 +1,2 @@
-Shardflow splits large work into smaller units. Each unit has a prompt, output path, quality check, and log.
+Agent Batch Harness splits large work into smaller units. Each unit has a prompt, output path, quality check, and log.
 

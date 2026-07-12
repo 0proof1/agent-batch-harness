@@ -1,6 +1,6 @@
 # Publication Policy
 
-Shardflow publishes reusable source, tests, synthetic examples, role prompts,
+Agent Batch Harness publishes reusable source, tests, synthetic examples, role prompts,
 skills, and documentation under the MIT License.
 
 Do not publish runner logs, real project prompts, generated evidence, secrets,

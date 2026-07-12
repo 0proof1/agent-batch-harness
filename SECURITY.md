@@ -6,7 +6,7 @@ agent logs, or sensitive project content.
 
 ## Trust Model
 
-Shardflow executes local agent and shell commands with the current user's
+Agent Batch Harness executes local agent and shell commands with the current user's
 permissions. It is not a sandbox. Prompt files, runner commands, verifier
 commands, work directories, and item manifests must therefore be trusted.
 
@@ -15,7 +15,7 @@ processes, prevent malicious commands, or protect shared output paths. Use
 disjoint shard outputs and an external sandbox when inputs or commands are not
 trusted.
 
-Timed-out runners are started in a separate process group. Shardflow terminates
+Timed-out runners are started in a separate process group. Agent Batch Harness terminates
 that group on POSIX and uses `taskkill /T /F` on Windows. External services and
 detached processes remain outside this guarantee.
 

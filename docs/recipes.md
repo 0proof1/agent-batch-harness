@@ -1,6 +1,6 @@
 # Workflow Recipes
 
-Shardflow's file contract stays the same across domains. Only item fields,
+Agent Batch Harness's file contract stays the same across domains. Only item fields,
 prompt instructions, and verifier commands change.
 
 ## Code Migration
