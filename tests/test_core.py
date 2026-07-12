@@ -15,6 +15,7 @@ from shardflow.core import (
     plan_shards,
     read_manifest,
     run_shard,
+    shell_invocation,
     verify_outputs,
     verify_shard_outputs,
 )
@@ -27,6 +28,11 @@ def python_command(code: str) -> str:
 
 
 class ShardflowCoreTest(unittest.TestCase):
+    def test_shell_invocation_avoids_windows_double_quoting(self) -> None:
+        command = '"C:\\Program Files\\Python\\python.exe" -c "print(1)"'
+        self.assertEqual((command, True), shell_invocation(command, "nt"))
+        self.assertEqual((["sh", "-c", command], False), shell_invocation(command, "posix"))
+
     def test_plan_and_build_prompts(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

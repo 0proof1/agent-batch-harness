@@ -5,6 +5,8 @@ versioning.
 
 ## Unreleased
 
+- Fixed Windows shell-runner quoting and ensured timed-out process handles are
+  reaped after process-tree termination.
 - Added complete English and Korean README editions with platform-specific
   installation guidance and language navigation.
 

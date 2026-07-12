@@ -306,13 +306,10 @@ def run_shard(
     if claimed is None:
         return 0
     with prompt_path.open("r", encoding="utf-8") as prompt, log_path.open("w", encoding="utf-8") as log:
-        command = ["codex", "exec", "--cd", str(workdir), "--skip-git-repo-check", "-"]
+        command: list[str] | str = ["codex", "exec", "--cd", str(workdir), "--skip-git-repo-check", "-"]
+        use_shell = False
         if runner == "shell":
-            command = (
-                ["cmd.exe", "/d", "/s", "/c", shell_command]
-                if os.name == "nt"
-                else ["sh", "-c", shell_command]
-            )
+            command, use_shell = shell_invocation(shell_command)
         environment = os.environ.copy()
         environment.update(
             {
@@ -322,18 +319,20 @@ def run_shard(
                 "SHARDFLOW_LOG": str(log_path),
             }
         )
-        return_code = run_logged_process(command, prompt, log, workdir, environment, timeout)
+        return_code = run_logged_process(command, prompt, log, workdir, environment, timeout, use_shell)
         if return_code == 124:
             log.write(f"\nshardflow: runner timed out after {timeout} seconds\n")
         if return_code == 0 and verify_command:
             log.write("\n\n--- shardflow verifier ---\n")
-            shell = (
-                ["cmd.exe", "/d", "/s", "/c", verify_command]
-                if os.name == "nt"
-                else ["sh", "-c", verify_command]
-            )
+            shell, verifier_uses_shell = shell_invocation(verify_command)
             return_code = run_logged_process(
-                shell, subprocess.DEVNULL, log, workdir, environment, timeout
+                shell,
+                subprocess.DEVNULL,
+                log,
+                workdir,
+                environment,
+                timeout,
+                verifier_uses_shell,
             )
             if return_code == 124:
                 log.write(f"\nshardflow: verifier timed out after {timeout} seconds\n")
@@ -346,13 +345,21 @@ def run_shard(
     return return_code
 
 
+def shell_invocation(command: str, platform: str | None = None) -> tuple[list[str] | str, bool]:
+    """Return a shell invocation without applying a second layer of Windows quoting."""
+    if (platform or os.name) == "nt":
+        return command, True
+    return ["sh", "-c", command], False
+
+
 def run_logged_process(
-    command: list[str],
+    command: list[str] | str,
     stdin: object,
     log: object,
     workdir: Path,
     environment: dict[str, str],
     timeout: float | None,
+    use_shell: bool = False,
 ) -> int:
     options: dict[str, object] = {}
     if os.name == "nt":
@@ -366,6 +373,7 @@ def run_logged_process(
         stderr=subprocess.STDOUT,
         cwd=workdir,
         env=environment,
+        shell=use_shell,
         **options,
     )
     try:
@@ -385,6 +393,11 @@ def terminate_process_tree(process: subprocess.Popen) -> None:
             stderr=subprocess.DEVNULL,
             check=False,
         )
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
         return
     try:
         os.killpg(process.pid, signal.SIGTERM)

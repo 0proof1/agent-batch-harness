@@ -5,7 +5,7 @@ Shardflow supports Python 3.11+ on Linux, macOS, and Windows.
 | Concern | Linux/macOS | Windows |
 |---|---|---|
 | Manifest lock | `flock` | `msvcrt` byte-range lock |
-| Shell runner | `sh -c` | `cmd.exe /d /s /c` |
+| Shell runner | `sh -c` | Python delegates the command string to `COMSPEC` |
 | Timeout isolation | new process session/group | new process group |
 | Timeout cleanup | `SIGTERM`, then `SIGKILL` | `taskkill /T /F` |
 
