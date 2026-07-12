@@ -1,0 +1,5 @@
+item_id	source	output	qc	notes
+alpha	inputs/alpha.txt	outputs/alpha.md	qc/alpha.json	Rewrite as a clear two-sentence project note.
+beta	inputs/beta.txt	outputs/beta.md	qc/beta.json	Rewrite as a clear two-sentence project note.
+gamma	inputs/gamma.txt	outputs/gamma.md	qc/gamma.json	Rewrite as a clear two-sentence project note.
+

@@ -1,0 +1,3 @@
+item_id	source	output	qc	notes
+add	inputs/legacy_math.py	outputs/add.py	qc/add.json	Extract add with type hints and a focused self-check.
+multiply	inputs/legacy_math.py	outputs/multiply.py	qc/multiply.json	Extract multiply with type hints and a focused self-check.

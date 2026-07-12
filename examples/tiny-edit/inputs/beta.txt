@@ -1,0 +1,2 @@
+The parent run should keep aggregate memory. Workers should focus on one shard and avoid editing shared status files.
+

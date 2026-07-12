@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible Shardflow defect
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: Remove credentials, private prompts, and sensitive logs.
+  - type: input
+    id: version
+    attributes:
+      label: Shardflow and Python versions
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

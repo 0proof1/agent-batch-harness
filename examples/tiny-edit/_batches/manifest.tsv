@@ -1,0 +1,3 @@
+shard_id	prompt_path	item_count	first_item	last_item	status	log_path
+shard_001	_batches/shard_001.prompt.md	2	alpha	beta	pending	_batches/run-logs/shard_001.log
+shard_002	_batches/shard_002.prompt.md	1	gamma	gamma	pending	_batches/run-logs/shard_002.log

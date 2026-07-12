@@ -1,0 +1,2 @@
+Resume support matters because long agent runs can stop. A manifest lets the next run find pending or failed work quickly.
+

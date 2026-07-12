@@ -1,0 +1,20 @@
+name: Feature proposal
+description: Propose a focused workflow or harness improvement
+title: "proposal: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and concrete use case
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Proposed CLI or file-contract change
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and compatibility impact

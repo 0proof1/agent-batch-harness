@@ -1,0 +1,10 @@
+__pycache__/
+*.tsv.lock
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+build/
+dist/
+_batches/run-logs/*.log
