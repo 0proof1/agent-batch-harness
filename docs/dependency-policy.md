@@ -1,6 +1,6 @@
 # Dependency Policy
 
-Shardflow keeps a zero-runtime-dependency core. A proposed dependency must solve
+Agent Batch Harness keeps a zero-runtime-dependency core. A proposed dependency must solve
 a cross-platform or security problem that the standard library cannot address
 cleanly, and its license, maintenance, supply-chain risk, and installation cost
 must be documented in the pull request.

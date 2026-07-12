@@ -49,6 +49,6 @@ jobs:
       - run: python tools/check_artifact.py dist/*
       - run: python tools/generate_sbom.py dist/sbom.cdx.json
       - run: sha256sum dist/*
-      - run: python -m venv /tmp/shardflow-smoke
-      - run: /tmp/shardflow-smoke/bin/pip install dist/*.whl
-      - run: /tmp/shardflow-smoke/bin/shardflow --help
+      - run: python -m venv /tmp/agent-batch-smoke
+      - run: /tmp/agent-batch-smoke/bin/pip install dist/*.whl
+      - run: /tmp/agent-batch-smoke/bin/agent-batch --help

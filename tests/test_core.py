@@ -6,10 +6,11 @@ import shlex
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from shardflow.core import (
+from agent_batch_harness.core import (
     build_prompts,
     claim_shard,
     plan_shards,
@@ -19,7 +20,7 @@ from shardflow.core import (
     verify_outputs,
     verify_shard_outputs,
 )
-from shardflow.cli import main
+from agent_batch_harness.cli import main
 
 
 def python_command(code: str) -> str:
@@ -27,7 +28,7 @@ def python_command(code: str) -> str:
     return f'{executable} -c "{code}"'
 
 
-class ShardflowCoreTest(unittest.TestCase):
+class AgentBatchHarnessCoreTest(unittest.TestCase):
     def test_shell_invocation_avoids_windows_double_quoting(self) -> None:
         command = '"C:\\Program Files\\Python\\python.exe" -c "print(1)"'
         self.assertEqual((command, True), shell_invocation(command, "nt"))
@@ -80,6 +81,13 @@ class ShardflowCoreTest(unittest.TestCase):
             self.assertTrue(ok)
             self.assertEqual(errors, [])
 
+            (root / "outputs/a.md").write_text("\n", encoding="utf-8")
+            (root / "qc/a.json").write_text(json.dumps({"pass": False}), encoding="utf-8")
+            ok, errors = verify_outputs(items, root, ["TODO"])
+            self.assertFalse(ok)
+            self.assertTrue(any("empty output" in error for error in errors))
+            self.assertTrue(any("pass=true" in error for error in errors))
+
     def test_claim_and_verify_one_shard(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -125,13 +133,13 @@ class ShardflowCoreTest(unittest.TestCase):
                 shard,
                 root,
                 "shell",
-                shell_command=python_command("import os; assert os.environ['SHARDFLOW_SHARD_ID'] == 'shard_001'"),
-                verify_command=python_command("import os; assert os.environ['SHARDFLOW_SHARD_ID'] == 'shard_001'"),
+                shell_command=python_command("import os; assert os.environ['AGENT_BATCH_SHARD_ID'] == 'shard_001'"),
+                verify_command=python_command("import os; assert os.environ['AGENT_BATCH_SHARD_ID'] == 'shard_001'"),
             )
             self.assertEqual(code, 0)
-            self.assertEqual(read_manifest(manifest)[0].status, "completed")
+            self.assertEqual(read_manifest(manifest)[0].status, "verified")
             log = (root / shard.log_path).read_text(encoding="utf-8")
-            self.assertIn("--- shardflow verifier ---", log)
+            self.assertIn("--- agent-batch-harness verifier ---", log)
 
     def test_failed_verifier_marks_shard_failed(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -159,6 +167,45 @@ class ShardflowCoreTest(unittest.TestCase):
             self.assertNotEqual(code, 0)
             self.assertEqual(read_manifest(manifest)[0].status, "failed")
 
+    def test_runner_start_exception_marks_claimed_shard_failed(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            items = root / "items.tsv"
+            items.write_text(
+                "item_id\tsource\toutput\tqc\tnotes\n"
+                "a\tinputs/a.txt\toutputs/a.md\tqc/a.json\t\n",
+                encoding="utf-8",
+            )
+            manifest = plan_shards(items, root / "_batches", 1)
+            shard = read_manifest(manifest)[0]
+            prompt = root / shard.prompt_path
+            prompt.parent.mkdir(parents=True, exist_ok=True)
+            prompt.write_text("hello\n", encoding="utf-8")
+
+            with patch("agent_batch_harness.core.subprocess.Popen", side_effect=OSError("runner missing")):
+                with self.assertRaisesRegex(OSError, "runner missing"):
+                    run_shard(manifest, shard, root, "shell", shell_command="agent")
+
+            current = read_manifest(manifest)[0]
+            self.assertEqual(current.status, "failed")
+            self.assertEqual(current.started_at, "")
+            self.assertIn("runner missing", (root / shard.log_path).read_text(encoding="utf-8"))
+
+    def test_missing_prompt_does_not_claim_shard(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            items = root / "items.tsv"
+            items.write_text(
+                "item_id\tsource\toutput\tqc\tnotes\n"
+                "a\tinputs/a.txt\toutputs/a.md\tqc/a.json\t\n",
+                encoding="utf-8",
+            )
+            manifest = plan_shards(items, root / "_batches", 1)
+            shard = read_manifest(manifest)[0]
+            with self.assertRaisesRegex(FileNotFoundError, "missing shard prompt"):
+                run_shard(manifest, shard, root, "shell", shell_command="agent")
+            self.assertEqual(read_manifest(manifest)[0].status, "pending")
+
     def test_cli_runs_shards_with_bounded_parallelism(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -185,13 +232,13 @@ class ShardflowCoreTest(unittest.TestCase):
                     "--runner",
                     "shell",
                     "--shell-command",
-                    python_command("import os; assert os.environ.get('SHARDFLOW_SHARD_ID')"),
+                    python_command("import os; assert os.environ.get('AGENT_BATCH_SHARD_ID')"),
                     "--jobs",
                     "2",
                 ]
             )
             self.assertEqual(code, 0)
-            self.assertEqual([shard.status for shard in read_manifest(manifest)], ["completed", "completed"])
+            self.assertEqual([shard.status for shard in read_manifest(manifest)], ["succeeded", "succeeded"])
 
 
 if __name__ == "__main__":

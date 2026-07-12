@@ -6,8 +6,8 @@ from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from shardflow.cli import main
-from shardflow.core import plan_shards, read_manifest
+from agent_batch_harness.cli import main
+from agent_batch_harness.core import plan_shards, read_manifest
 
 
 def make_manifest(root: Path) -> Path:
@@ -63,7 +63,7 @@ class CliTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(read_manifest(manifest)[0].status, "pending")
 
-    def test_marked_dry_run_completes_shard(self) -> None:
+    def test_marked_dry_run_records_runner_success(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             manifest = make_manifest(root)
@@ -81,7 +81,7 @@ class CliTest(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertEqual(read_manifest(manifest)[0].status, "completed")
+            self.assertEqual(read_manifest(manifest)[0].status, "succeeded")
 
 
 if __name__ == "__main__":

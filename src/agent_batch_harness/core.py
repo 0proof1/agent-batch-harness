@@ -8,6 +8,7 @@ import signal
 import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from string import Template
 from typing import Iterable
@@ -22,8 +23,10 @@ MANIFEST_FIELDS = [
     "last_item",
     "status",
     "log_path",
+    "started_at",
+    "attempt",
 ]
-VALID_STATUSES = {"pending", "running", "completed", "failed", "skipped"}
+VALID_STATUSES = {"pending", "running", "succeeded", "verified", "failed", "skipped"}
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,8 @@ class Shard:
     last_item: str
     status: str
     log_path: str
+    started_at: str = ""
+    attempt: int = 0
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -114,6 +119,20 @@ def read_items(path: Path) -> list[Item]:
         raise ValueError(f"{path} contains an empty item_id")
     if len(identifiers) != len(set(identifiers)):
         raise ValueError(f"{path} contains duplicate item_id values")
+    destinations: dict[str, tuple[str, str]] = {}
+    for item in items:
+        for kind, value in (("output", item.output), ("qc", item.qc)):
+            if not value:
+                raise ValueError(f"{path} contains an empty {kind} path for {item.item_id}")
+            destination_key = os.path.normcase(os.path.normpath(value))
+            previous = destinations.get(destination_key)
+            if previous is not None:
+                previous_item, previous_kind = previous
+                raise ValueError(
+                    f"{path} contains conflicting destination path {value!r}: "
+                    f"{previous_item}.{previous_kind} and {item.item_id}.{kind}"
+                )
+            destinations[destination_key] = (item.item_id, kind)
     return items
 
 
@@ -137,6 +156,8 @@ def plan_shards(items_path: Path, batch_dir: Path, batch_size: int) -> Path:
                 "last_item": group[-1].item_id,
                 "status": "pending",
                 "log_path": str(batch_dir / "run-logs" / f"{shard_id}.log"),
+                "started_at": "",
+                "attempt": "0",
             }
         )
     manifest_path = batch_dir / "manifest.tsv"
@@ -161,6 +182,8 @@ def read_manifest(manifest_path: Path) -> list[Shard]:
             last_item=row["last_item"],
             status=row["status"],
             log_path=row["log_path"],
+            started_at=row["started_at"],
+            attempt=int(row["attempt"]),
         )
         for row in rows
     ]
@@ -188,6 +211,8 @@ def update_manifest_status(
                 if expected_statuses is not None and row["status"] not in expected_statuses:
                     return False
                 row["status"] = status
+                if status != "running":
+                    row["started_at"] = ""
                 write_manifest(manifest_path, rows)
                 return True
     raise ValueError(f"unknown shard id: {shard_id}")
@@ -203,6 +228,8 @@ def claim_shard(manifest_path: Path, shard_id: str, allowed_statuses: set[str]) 
             if row["status"] not in allowed_statuses:
                 return None
             row["status"] = "running"
+            row["started_at"] = datetime.now(timezone.utc).isoformat()
+            row["attempt"] = str(int(row["attempt"]) + 1)
             write_manifest(manifest_path, rows)
             return Shard(
                 shard_id=row["shard_id"],
@@ -212,8 +239,36 @@ def claim_shard(manifest_path: Path, shard_id: str, allowed_statuses: set[str]) 
                 last_item=row["last_item"],
                 status="running",
                 log_path=row["log_path"],
+                started_at=row["started_at"],
+                attempt=int(row["attempt"]),
             )
     raise ValueError(f"unknown shard id: {shard_id}")
+
+
+def reclaim_stale_shards(manifest_path: Path, older_than_seconds: float) -> list[str]:
+    """Mark running shards older than the threshold failed so they can be resumed."""
+    if older_than_seconds <= 0:
+        raise ValueError("reclaim threshold must be greater than 0")
+    now = datetime.now(timezone.utc)
+    reclaimed: list[str] = []
+    with manifest_lock(manifest_path):
+        rows = read_tsv(manifest_path)
+        for row in rows:
+            if row["status"] != "running" or not row["started_at"]:
+                continue
+            try:
+                started_at = datetime.fromisoformat(row["started_at"])
+            except ValueError as exc:
+                raise ValueError(f"invalid started_at for {row['shard_id']}: {row['started_at']}") from exc
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            if (now - started_at).total_seconds() >= older_than_seconds:
+                row["status"] = "failed"
+                row["started_at"] = ""
+                reclaimed.append(row["shard_id"])
+        if reclaimed:
+            write_manifest(manifest_path, rows)
+    return reclaimed
 
 
 def items_for_shard(items: list[Item], shard: Shard) -> list[Item]:
@@ -302,46 +357,54 @@ def run_shard(
         raise ValueError(f"unsupported runner: {runner}")
     if runner == "shell" and not shell_command:
         raise ValueError("--shell-command is required when runner is shell")
+    if not prompt_path.is_file():
+        raise FileNotFoundError(f"missing shard prompt: {prompt_path}")
     claimed = claim_shard(manifest_path, shard.shard_id, allowed_statuses or {"pending", "failed"})
     if claimed is None:
         return 0
-    with prompt_path.open("r", encoding="utf-8") as prompt, log_path.open("w", encoding="utf-8") as log:
-        command: list[str] | str = ["codex", "exec", "--cd", str(workdir), "--skip-git-repo-check", "-"]
-        use_shell = False
-        if runner == "shell":
-            command, use_shell = shell_invocation(shell_command)
-        environment = os.environ.copy()
-        environment.update(
-            {
-                "SHARDFLOW_SHARD_ID": claimed.shard_id,
-                "SHARDFLOW_PROMPT": str(prompt_path),
-                "SHARDFLOW_WORKDIR": str(workdir),
-                "SHARDFLOW_LOG": str(log_path),
-            }
-        )
-        return_code = run_logged_process(command, prompt, log, workdir, environment, timeout, use_shell)
-        if return_code == 124:
-            log.write(f"\nshardflow: runner timed out after {timeout} seconds\n")
-        if return_code == 0 and verify_command:
-            log.write("\n\n--- shardflow verifier ---\n")
-            shell, verifier_uses_shell = shell_invocation(verify_command)
-            return_code = run_logged_process(
-                shell,
-                subprocess.DEVNULL,
-                log,
-                workdir,
-                environment,
-                timeout,
-                verifier_uses_shell,
+    try:
+        with prompt_path.open("r", encoding="utf-8") as prompt, log_path.open("w", encoding="utf-8") as log:
+            command: list[str] | str = ["codex", "exec", "--cd", str(workdir), "--skip-git-repo-check", "-"]
+            use_shell = False
+            if runner == "shell":
+                command, use_shell = shell_invocation(shell_command)
+            environment = os.environ.copy()
+            environment.update(
+                {
+                    "AGENT_BATCH_SHARD_ID": claimed.shard_id,
+                    "AGENT_BATCH_PROMPT": str(prompt_path),
+                    "AGENT_BATCH_WORKDIR": str(workdir),
+                    "AGENT_BATCH_LOG": str(log_path),
+                    "AGENT_BATCH_ATTEMPT": str(claimed.attempt),
+                }
             )
+            return_code = run_logged_process(command, prompt, log, workdir, environment, timeout, use_shell)
             if return_code == 124:
-                log.write(f"\nshardflow: verifier timed out after {timeout} seconds\n")
-    update_manifest_status(
-        manifest_path,
-        shard.shard_id,
-        "completed" if return_code == 0 else "failed",
-        expected_statuses={"running"},
-    )
+                log.write(f"\nagent-batch-harness: runner timed out after {timeout} seconds\n")
+            if return_code == 0 and verify_command:
+                log.write("\n\n--- agent-batch-harness verifier ---\n")
+                shell, verifier_uses_shell = shell_invocation(verify_command)
+                return_code = run_logged_process(
+                    shell,
+                    subprocess.DEVNULL,
+                    log,
+                    workdir,
+                    environment,
+                    timeout,
+                    verifier_uses_shell,
+                )
+                if return_code == 124:
+                    log.write(f"\nagent-batch-harness: verifier timed out after {timeout} seconds\n")
+    except BaseException as exc:
+        update_manifest_status(manifest_path, shard.shard_id, "failed", expected_statuses={"running"})
+        try:
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(f"\nagent-batch-harness: execution error: {type(exc).__name__}: {exc}\n")
+        except OSError:
+            pass
+        raise
+    final_status = "verified" if return_code == 0 and verify_command else "succeeded" if return_code == 0 else "failed"
+    update_manifest_status(manifest_path, shard.shard_id, final_status, expected_statuses={"running"})
     return return_code
 
 
@@ -381,6 +444,9 @@ def run_logged_process(
     except subprocess.TimeoutExpired:
         terminate_process_tree(process)
         return 124
+    except BaseException:
+        terminate_process_tree(process)
+        raise
 
 
 def terminate_process_tree(process: subprocess.Popen) -> None:
@@ -407,6 +473,7 @@ def terminate_process_tree(process: subprocess.Popen) -> None:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        process.wait()
 
 
 def count_paragraphs(path: Path) -> int:
@@ -437,17 +504,25 @@ def verify_items(
         if not output_path.exists():
             errors.append(f"missing output: {item.output}")
         else:
-            text = output_path.read_text(encoding="utf-8")
-            for pattern in patterns:
-                if pattern.search(text):
-                    errors.append(f"forbidden pattern {pattern.pattern!r} in {item.output}")
+            try:
+                text = output_path.read_text(encoding="utf-8")
+            except (OSError, UnicodeError) as exc:
+                errors.append(f"unreadable output: {item.output}: {exc}")
+            else:
+                if not text.strip():
+                    errors.append(f"empty output: {item.output}")
+                for pattern in patterns:
+                    if pattern.search(text):
+                        errors.append(f"forbidden pattern {pattern.pattern!r} in {item.output}")
         if require_json:
             if not qc_path.exists():
                 errors.append(f"missing qc json: {item.qc}")
             else:
                 try:
-                    json.loads(qc_path.read_text(encoding="utf-8"))
-                except json.JSONDecodeError as exc:
+                    qc = json.loads(qc_path.read_text(encoding="utf-8"))
+                    if not isinstance(qc, dict) or qc.get("pass") is not True:
+                        errors.append(f"qc json must be an object with pass=true: {item.qc}")
+                except (json.JSONDecodeError, OSError, UnicodeError) as exc:
                     errors.append(f"invalid qc json: {item.qc}: {exc}")
     return not errors, errors
 

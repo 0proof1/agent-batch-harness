@@ -3,18 +3,19 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "shardflow"
-version = "0.1.0"
+name = "agent-batch-harness"
+version = "0.1.0a1"
 description = "A small harness for sharded, resumable agent workflows."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
-authors = [{ name = "Shardflow contributors" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Agent Batch Harness contributors" }]
 keywords = ["agents", "shards", "workflow", "automation", "codex"]
+dependencies = []
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
-  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -24,13 +25,18 @@ classifiers = [
   "Operating System :: POSIX",
 ]
 
+[project.urls]
+Homepage = "https://github.com/0proof1/agent-batch-harness"
+Repository = "https://github.com/0proof1/agent-batch-harness"
+Issues = "https://github.com/0proof1/agent-batch-harness/issues"
+
 [project.scripts]
-shardflow = "shardflow.cli:main"
+agent-batch = "agent_batch_harness.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.data-files]
-"share/shardflow/agents" = ["agents/*.md"]
-"share/shardflow/skills/generic-shard" = ["skills/generic-shard/SKILL.md"]
-"share/shardflow/docs" = ["docs/*.md"]
+"share/agent-batch-harness/agents" = ["agents/*.md"]
+"share/agent-batch-harness/skills/generic-shard" = ["skills/generic-shard/SKILL.md"]
+"share/agent-batch-harness/docs" = ["docs/*.md"]

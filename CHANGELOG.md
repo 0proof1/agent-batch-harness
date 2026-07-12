@@ -3,7 +3,13 @@
 All notable changes are documented here. The project follows semantic
 versioning.
 
-## Unreleased
+## 0.1.0a1 - 2026-07-13
+
+- Renamed the project and package from Shardflow to Agent Batch Harness.
+- Split runner-only `succeeded` from verifier-backed `verified` status.
+- Added claim timestamps, attempt counters, and stale-running recovery.
+- Made runner startup and interruption failures return claimed shards to `failed`.
+- Rejected colliding output/QC destinations and strengthened structural verification.
 
 - Fixed Windows shell-runner quoting and ensured timed-out process handles are
   reaped after process-tree termination.
@@ -17,8 +23,6 @@ versioning.
 - Added publication, security, community, CI, packaging, and release gates.
 - Added Windows-compatible manifest locking, platform shell selection, and
   process-tree timeout cleanup with Linux/macOS/Windows CI.
-
-## 0.1.0 - Initial local candidate
 
 - Added planning, prompt generation, resume, execution, verification, and manual
   status commands.

@@ -1,6 +1,6 @@
 # Platform Support
 
-Shardflow supports Python 3.11+ on Linux, macOS, and Windows.
+Agent Batch Harness supports Python 3.11+ on Linux, macOS, and Windows.
 
 | Concern | Linux/macOS | Windows |
 |---|---|---|
@@ -16,4 +16,4 @@ Paths in TSV files should use project-relative syntax accepted by Python's
 
 CI covers Python 3.11-3.13 on Linux and Python 3.12 on macOS and Windows. Agent
 CLIs invoked by a runner remain external prerequisites and may have narrower
-platform support than Shardflow itself.
+platform support than Agent Batch Harness itself.
