@@ -275,7 +275,8 @@ PYTHONPATH=../../src python3 -m agent_batch_harness run \
 
 ## The Item File
 
-`items.tsv` is the source of truth for real work units.
+`items.tsv` is the source of truth for real work units. It must contain the
+required header and at least one item row.
 
 Required columns:
 

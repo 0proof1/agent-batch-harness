@@ -20,6 +20,20 @@ class ValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least 1"):
             chunk([], 0)
 
+    def test_empty_items_file_is_rejected(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.tsv"
+            path.write_text("", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "missing required item fields"):
+                read_items(path)
+
+    def test_items_require_at_least_one_row(self) -> None:
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "items.tsv"
+            path.write_text("item_id\tsource\toutput\tqc\tnotes\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "contains no items"):
+                read_items(path)
+
     def test_items_require_output_fields(self) -> None:
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "items.tsv"

@@ -55,9 +55,15 @@ class Shard:
     attempt: int = 0
 
 
-def read_tsv(path: Path) -> list[dict[str, str]]:
+def read_tsv_document(path: Path) -> tuple[list[str], list[dict[str, str]]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
+        reader = csv.DictReader(handle, delimiter="\t")
+        rows = list(reader)
+        return list(reader.fieldnames or []), rows
+
+
+def read_tsv(path: Path) -> list[dict[str, str]]:
+    return read_tsv_document(path)[1]
 
 
 def write_tsv(path: Path, fieldnames: list[str], rows: Iterable[dict[str, str]]) -> None:
@@ -104,10 +110,12 @@ def write_manifest(manifest_path: Path, rows: Iterable[dict[str, str]]) -> None:
 
 
 def read_items(path: Path) -> list[Item]:
-    rows = read_tsv(path)
-    missing = [field for field in ITEM_FIELDS[:4] if rows and field not in rows[0]]
+    fieldnames, rows = read_tsv_document(path)
+    missing = [field for field in ITEM_FIELDS[:4] if field not in fieldnames]
     if missing:
         raise ValueError(f"{path} is missing required item fields: {', '.join(missing)}")
+    if not rows:
+        raise ValueError(f"{path} contains no items")
     items = [
         Item(
             item_id=row["item_id"],
@@ -354,6 +362,7 @@ def run_shard(
     allowed_statuses: set[str] | None = None,
     timeout: float | None = None,
 ) -> int:
+    workdir = workdir.resolve()
     prompt_path = workdir / shard.prompt_path
     log_path = workdir / shard.log_path
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -390,6 +399,7 @@ def run_shard(
                 log.write(f"\nagent-batch-harness: runner timed out after {timeout} seconds\n")
             if return_code == 0 and verify_command:
                 log.write("\n\n--- agent-batch-harness verifier ---\n")
+                log.flush()
                 shell, verifier_uses_shell = shell_invocation(verify_command)
                 return_code = run_logged_process(
                     shell,

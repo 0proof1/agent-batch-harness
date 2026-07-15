@@ -8,6 +8,12 @@ versioning.
 - Bound runner, verifier, and marked dry-run finalization to the exact manifest
   attempt that was claimed, preventing stale processes from overwriting a newer
   retry after reclaim.
+- Resolved runner work directories before constructing commands and exported
+  paths, keeping relative `--workdir` values valid inside child processes.
+- Flushed the verifier log marker before launching the verifier so combined log
+  output remains in execution order.
+- Rejected item files with missing headers or no data rows instead of treating
+  an empty work set as successfully verified.
 
 ## 0.1.0a1 - 2026-07-13
 

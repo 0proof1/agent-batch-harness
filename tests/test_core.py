@@ -141,6 +141,64 @@ class AgentBatchHarnessCoreTest(unittest.TestCase):
             log = (root / shard.log_path).read_text(encoding="utf-8")
             self.assertIn("--- agent-batch-harness verifier ---", log)
 
+    def test_relative_workdir_is_resolved_before_runner_invocation(self) -> None:
+        with TemporaryDirectory(dir=Path.cwd()) as tmp:
+            root = Path(tmp)
+            items = root / "items.tsv"
+            items.write_text(
+                "item_id\tsource\toutput\tqc\tnotes\n"
+                "a\tinputs/a.txt\toutputs/a.md\tqc/a.json\t\n",
+                encoding="utf-8",
+            )
+            manifest = plan_shards(items, root / "_batches", 1)
+            shard = read_manifest(manifest)[0]
+            prompt = root / shard.prompt_path
+            prompt.parent.mkdir(parents=True, exist_ok=True)
+            prompt.write_text("hello\n", encoding="utf-8")
+            relative_root = Path(os.path.relpath(root, Path.cwd()))
+
+            with patch("agent_batch_harness.core.run_logged_process", return_value=0) as logged_process:
+                code = run_shard(manifest, shard, relative_root, "codex")
+
+            command = logged_process.call_args.args[0]
+            runner_workdir = logged_process.call_args.args[3]
+            environment = logged_process.call_args.args[4]
+            self.assertEqual(code, 0)
+            self.assertEqual(Path(command[3]), root.resolve())
+            self.assertEqual(runner_workdir, root.resolve())
+            self.assertEqual(Path(environment["AGENT_BATCH_WORKDIR"]), root.resolve())
+            self.assertTrue(Path(environment["AGENT_BATCH_PROMPT"]).is_absolute())
+            self.assertTrue(Path(environment["AGENT_BATCH_LOG"]).is_absolute())
+
+    def test_verifier_marker_precedes_verifier_output(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            items = root / "items.tsv"
+            items.write_text(
+                "item_id\tsource\toutput\tqc\tnotes\n"
+                "a\tinputs/a.txt\toutputs/a.md\tqc/a.json\t\n",
+                encoding="utf-8",
+            )
+            manifest = plan_shards(items, root / "_batches", 1)
+            shard = read_manifest(manifest)[0]
+            prompt = root / shard.prompt_path
+            prompt.parent.mkdir(parents=True, exist_ok=True)
+            prompt.write_text("hello\n", encoding="utf-8")
+
+            code = run_shard(
+                manifest,
+                shard,
+                root,
+                "shell",
+                shell_command=python_command("print('runner output')"),
+                verify_command=python_command("print('verifier output')"),
+            )
+
+            log = (root / shard.log_path).read_text(encoding="utf-8")
+            self.assertEqual(code, 0)
+            self.assertLess(log.index("runner output"), log.index("--- agent-batch-harness verifier ---"))
+            self.assertLess(log.index("--- agent-batch-harness verifier ---"), log.index("verifier output"))
+
     def test_failed_verifier_marks_shard_failed(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

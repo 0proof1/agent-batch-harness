@@ -30,6 +30,8 @@ The `dry-run` runner is included for tests, demos, and planning. The generic
 `shell` runner passes the prompt on standard input and exports shard metadata
 through `AGENT_BATCH_SHARD_ID`, `AGENT_BATCH_PROMPT`, `AGENT_BATCH_WORKDIR`, and
 `AGENT_BATCH_LOG`. `AGENT_BATCH_ATTEMPT` identifies the current claim attempt.
+The work directory is resolved before invocation, so the runner working
+directory, command arguments, and exported paths share one absolute base.
 
 Future runners should implement the same contract: read one prompt, write one
 log, return an exit code, and leave shard status to the harness.
