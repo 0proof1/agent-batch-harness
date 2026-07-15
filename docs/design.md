@@ -49,7 +49,10 @@ shards write to disjoint project paths.
 
 Each claim records `started_at` and increments `attempt`. The `reclaim` command
 changes sufficiently old `running` claims to `failed`; it does not guess whether
-a recent process is alive.
+a recent process is alive. A runner may finalize only the same `attempt` that it
+claimed. If reclaim and retry create a newer attempt while an older process is
+still alive, the older process reports a lost claim instead of changing the
+newer attempt's status.
 
 The CLI can launch a bounded number of those processes with `run --jobs N`.
 The lock provides the cross-process coordination; the bounded executor only

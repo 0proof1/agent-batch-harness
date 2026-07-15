@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from .core import (
+    ClaimLostError,
     build_prompts,
     claim_shard,
     next_shard,
@@ -62,25 +63,48 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     def run_one(shard) -> int:
         print(f"running {shard.shard_id} with {args.runner}")
+        dry_run_claim = None
         if (args.dry_run or args.runner == "dry-run") and args.mark_dry_run:
-            claimed = claim_shard(args.manifest, shard.shard_id, allowed_statuses)
-            if claimed is None:
+            dry_run_claim = claim_shard(args.manifest, shard.shard_id, allowed_statuses)
+            if dry_run_claim is None:
                 print(f"skipping {shard.shard_id}; it is no longer eligible")
                 return 0
-        code = run_shard(
-            args.manifest,
-            shard,
-            args.workdir,
-            args.runner,
-            dry_run=args.dry_run,
-            shell_command=args.shell_command,
-            verify_command=args.verify_command,
-            allowed_statuses=allowed_statuses,
-            timeout=args.timeout,
-        )
+        try:
+            code = run_shard(
+                args.manifest,
+                shard,
+                args.workdir,
+                args.runner,
+                dry_run=args.dry_run,
+                shell_command=args.shell_command,
+                verify_command=args.verify_command,
+                allowed_statuses=allowed_statuses,
+                timeout=args.timeout,
+            )
+        except BaseException:
+            if dry_run_claim is not None:
+                update_manifest_status(
+                    args.manifest,
+                    shard.shard_id,
+                    "failed",
+                    expected_statuses={"running"},
+                    expected_attempt=dry_run_claim.attempt,
+                )
+            raise
         if args.dry_run or args.runner == "dry-run":
-            if args.mark_dry_run:
-                update_manifest_status(args.manifest, shard.shard_id, "succeeded")
+            if dry_run_claim is not None:
+                finalized = update_manifest_status(
+                    args.manifest,
+                    shard.shard_id,
+                    "succeeded",
+                    expected_statuses={"running"},
+                    expected_attempt=dry_run_claim.attempt,
+                )
+                if not finalized:
+                    raise ClaimLostError(
+                        f"claim for {shard.shard_id} attempt {dry_run_claim.attempt} is no longer current; "
+                        "refusing to overwrite the current manifest state"
+                    )
         return code
 
     def run_one_safely(shard) -> int:

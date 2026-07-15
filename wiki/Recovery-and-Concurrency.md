@@ -24,7 +24,9 @@ agent-batch reclaim \
 ```
 
 Reclaim changes stale `running` rows to `failed`. It does not inspect remote
-workers or prove that a detached process has stopped.
+workers or prove that a detached process has stopped. If an older process later
+finishes after a replacement attempt has started, its final status update is
+rejected because its attempt number is no longer current.
 
 ## Parallel execution
 

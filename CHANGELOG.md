@@ -3,6 +3,12 @@
 All notable changes are documented here. The project follows semantic
 versioning.
 
+## Unreleased
+
+- Bound runner, verifier, and marked dry-run finalization to the exact manifest
+  attempt that was claimed, preventing stale processes from overwriting a newer
+  retry after reclaim.
+
 ## 0.1.0a1 - 2026-07-13
 
 - Renamed the project and package from Shardflow to Agent Batch Harness.

@@ -29,6 +29,10 @@ MANIFEST_FIELDS = [
 VALID_STATUSES = {"pending", "running", "succeeded", "verified", "failed", "skipped"}
 
 
+class ClaimLostError(RuntimeError):
+    """Raised when a runner tries to finalize a claim that is no longer current."""
+
+
 @dataclass(frozen=True)
 class Item:
     item_id: str
@@ -201,6 +205,7 @@ def update_manifest_status(
     shard_id: str,
     status: str,
     expected_statuses: set[str] | None = None,
+    expected_attempt: int | None = None,
 ) -> bool:
     if status not in VALID_STATUSES:
         raise ValueError(f"invalid shard status: {status}")
@@ -209,6 +214,8 @@ def update_manifest_status(
         for row in rows:
             if row["shard_id"] == shard_id:
                 if expected_statuses is not None and row["status"] not in expected_statuses:
+                    return False
+                if expected_attempt is not None and int(row["attempt"]) != expected_attempt:
                     return False
                 row["status"] = status
                 if status != "running":
@@ -396,15 +403,33 @@ def run_shard(
                 if return_code == 124:
                     log.write(f"\nagent-batch-harness: verifier timed out after {timeout} seconds\n")
     except BaseException as exc:
-        update_manifest_status(manifest_path, shard.shard_id, "failed", expected_statuses={"running"})
-        try:
-            with log_path.open("a", encoding="utf-8") as log:
-                log.write(f"\nagent-batch-harness: execution error: {type(exc).__name__}: {exc}\n")
-        except OSError:
-            pass
+        claim_failed = update_manifest_status(
+            manifest_path,
+            shard.shard_id,
+            "failed",
+            expected_statuses={"running"},
+            expected_attempt=claimed.attempt,
+        )
+        if claim_failed:
+            try:
+                with log_path.open("a", encoding="utf-8") as log:
+                    log.write(f"\nagent-batch-harness: execution error: {type(exc).__name__}: {exc}\n")
+            except OSError:
+                pass
         raise
     final_status = "verified" if return_code == 0 and verify_command else "succeeded" if return_code == 0 else "failed"
-    update_manifest_status(manifest_path, shard.shard_id, final_status, expected_statuses={"running"})
+    finalized = update_manifest_status(
+        manifest_path,
+        shard.shard_id,
+        final_status,
+        expected_statuses={"running"},
+        expected_attempt=claimed.attempt,
+    )
+    if not finalized:
+        raise ClaimLostError(
+            f"claim for {shard.shard_id} attempt {claimed.attempt} is no longer current; "
+            "refusing to overwrite the current manifest state"
+        )
     return return_code
 
 

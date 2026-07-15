@@ -10,8 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from agent_batch_harness.core import (
+    ClaimLostError,
     claim_shard,
     plan_shards,
     read_manifest,
@@ -51,6 +53,101 @@ class ConcurrencyTest(unittest.TestCase):
             claimed = next(claim for claim in claims if claim is not None)
             self.assertEqual(claimed.attempt, 1)
             self.assertTrue(claimed.started_at)
+
+    def test_stale_attempt_cannot_update_a_new_claim(self) -> None:
+        with TemporaryDirectory() as tmp:
+            manifest, shards = make_project(Path(tmp))
+            first_claim = claim_shard(manifest, shards[0].shard_id, {"pending"})
+            self.assertIsNotNone(first_claim)
+            assert first_claim is not None
+            self.assertTrue(
+                update_manifest_status(
+                    manifest,
+                    shards[0].shard_id,
+                    "failed",
+                    expected_statuses={"running"},
+                    expected_attempt=first_claim.attempt,
+                )
+            )
+            second_claim = claim_shard(manifest, shards[0].shard_id, {"failed"})
+            self.assertIsNotNone(second_claim)
+            assert second_claim is not None
+
+            stale_update = update_manifest_status(
+                manifest,
+                shards[0].shard_id,
+                "succeeded",
+                expected_statuses={"running"},
+                expected_attempt=first_claim.attempt,
+            )
+
+            self.assertFalse(stale_update)
+            current = read_manifest(manifest)[0]
+            self.assertEqual(current.status, "running")
+            self.assertEqual(current.attempt, second_claim.attempt)
+            self.assertEqual(current.started_at, second_claim.started_at)
+
+    def test_runner_reports_lost_claim_without_finalizing_replacement(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, shards = make_project(root)
+            replacement = {}
+
+            def replace_claim(*_args, **_kwargs) -> int:
+                first_claim = read_manifest(manifest)[0]
+                self.assertTrue(
+                    update_manifest_status(
+                        manifest,
+                        first_claim.shard_id,
+                        "failed",
+                        expected_statuses={"running"},
+                        expected_attempt=first_claim.attempt,
+                    )
+                )
+                replacement["claim"] = claim_shard(manifest, first_claim.shard_id, {"failed"})
+                return 0
+
+            with patch("agent_batch_harness.core.run_logged_process", side_effect=replace_claim):
+                with self.assertRaisesRegex(ClaimLostError, "attempt 1 is no longer current"):
+                    run_shard(manifest, shards[0], root, "shell", shell_command="agent")
+
+            current = read_manifest(manifest)[0]
+            second_claim = replacement["claim"]
+            self.assertIsNotNone(second_claim)
+            self.assertEqual(current.status, "running")
+            self.assertEqual(current.attempt, second_claim.attempt)
+            self.assertEqual(current.started_at, second_claim.started_at)
+
+    def test_stale_runner_exception_does_not_fail_replacement(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest, shards = make_project(root)
+            replacement = {}
+
+            def replace_claim_and_fail(*_args, **_kwargs) -> int:
+                first_claim = read_manifest(manifest)[0]
+                self.assertTrue(
+                    update_manifest_status(
+                        manifest,
+                        first_claim.shard_id,
+                        "failed",
+                        expected_statuses={"running"},
+                        expected_attempt=first_claim.attempt,
+                    )
+                )
+                replacement["claim"] = claim_shard(manifest, first_claim.shard_id, {"failed"})
+                raise OSError("stale runner failed")
+
+            with patch("agent_batch_harness.core.run_logged_process", side_effect=replace_claim_and_fail):
+                with self.assertRaisesRegex(OSError, "stale runner failed"):
+                    run_shard(manifest, shards[0], root, "shell", shell_command="agent")
+
+            current = read_manifest(manifest)[0]
+            second_claim = replacement["claim"]
+            self.assertIsNotNone(second_claim)
+            self.assertEqual(current.status, "running")
+            self.assertEqual(current.attempt, second_claim.attempt)
+            self.assertEqual(current.started_at, second_claim.started_at)
 
     def test_reclaim_marks_only_stale_running_shards_failed(self) -> None:
         with TemporaryDirectory() as tmp:

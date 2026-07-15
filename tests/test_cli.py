@@ -5,9 +5,10 @@ import unittest
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from agent_batch_harness.cli import main
-from agent_batch_harness.core import plan_shards, read_manifest
+from agent_batch_harness.core import claim_shard, plan_shards, read_manifest, update_manifest_status
 
 
 def make_manifest(root: Path) -> Path:
@@ -82,6 +83,47 @@ class CliTest(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             self.assertEqual(read_manifest(manifest)[0].status, "succeeded")
+
+    def test_marked_dry_run_does_not_finalize_replacement_attempt(self) -> None:
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = make_manifest(root)
+
+            def replace_claim(*_args, **_kwargs) -> int:
+                first_claim = read_manifest(manifest)[0]
+                self.assertTrue(
+                    update_manifest_status(
+                        manifest,
+                        first_claim.shard_id,
+                        "failed",
+                        expected_statuses={"running"},
+                        expected_attempt=first_claim.attempt,
+                    )
+                )
+                self.assertIsNotNone(claim_shard(manifest, first_claim.shard_id, {"failed"}))
+                return 0
+
+            output = io.StringIO()
+            with patch("agent_batch_harness.cli.run_shard", side_effect=replace_claim):
+                with redirect_stdout(output):
+                    code = main(
+                        [
+                            "run",
+                            "--manifest",
+                            str(manifest),
+                            "--workdir",
+                            str(root),
+                            "--runner",
+                            "dry-run",
+                            "--mark-dry-run",
+                        ]
+                    )
+
+            current = read_manifest(manifest)[0]
+            self.assertEqual(code, 1)
+            self.assertEqual(current.status, "running")
+            self.assertEqual(current.attempt, 2)
+            self.assertIn("ClaimLostError", output.getvalue())
 
 
 if __name__ == "__main__":
