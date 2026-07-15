@@ -24,6 +24,6 @@ Those facts are deliberately separate.
 
 ## Current maturity
 
-The project is a `0.1.0a1` reference harness. Its plain TSV, Markdown, JSON, and
+The project is a `0.1.0a2` reference harness. Its plain TSV, Markdown, JSON, and
 log files are designed to remain inspectable and replaceable. Treat external
 agent CLIs, prompts, manifests, and shell commands as trusted input.

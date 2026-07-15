@@ -3,7 +3,7 @@
 All notable changes are documented here. The project follows semantic
 versioning.
 
-## Unreleased
+## 0.1.0a2 - 2026-07-15
 
 - Bound runner, verifier, and marked dry-run finalization to the exact manifest
   attempt that was claimed, preventing stale processes from overwriting a newer

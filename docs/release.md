@@ -16,18 +16,15 @@ Releases are prepared locally before any remote action.
 Versions follow semantic versioning. Alpha releases may change file contracts;
 stable releases must document migrations for manifest or CLI incompatibilities.
 
-## Repository Rename Handoff
+## Repository Checks
 
-Before publishing `0.1.0a1`, rename the GitHub repository from `shardflow` to
-`agent-batch-harness`. After GitHub confirms the rename, update and verify the
-local remote:
+The canonical repository is `0proof1/agent-batch-harness`. Before publishing,
+verify the local remote:
 
 ```bash
 git remote set-url origin https://github.com/0proof1/agent-batch-harness.git
 git remote -v
 ```
 
-Do not update `origin` first: the new URL is not usable until the remote rename
-has succeeded. Then confirm repository links, issue templates, branch
-protection, and trusted-publishing configuration under the new name before
-tagging the alpha release.
+Then confirm repository links, issue templates, branch protection, and
+trusted-publishing configuration before tagging the release.

@@ -56,6 +56,12 @@ def main() -> int:
         errors.append("pyproject.toml must declare the MIT license")
     if project.get("dependencies"):
         errors.append("runtime dependencies require explicit publication review")
+    package_source = (ROOT / "src" / "agent_batch_harness" / "__init__.py").read_text(encoding="utf-8")
+    package_version = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']$', package_source, re.MULTILINE)
+    if package_version is None:
+        errors.append("src/agent_batch_harness/__init__.py must declare __version__")
+    elif package_version.group(1) != project.get("version"):
+        errors.append("package __version__ must match pyproject.toml")
 
     for path in public_text_files():
         text = path.read_text(encoding="utf-8", errors="replace")

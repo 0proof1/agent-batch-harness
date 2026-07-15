@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Shardflow defect
+description: Report a reproducible Agent Batch Harness defect
 title: "bug: "
 body:
   - type: markdown
@@ -8,7 +8,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Shardflow and Python versions
+      label: Agent Batch Harness and Python versions
     validations:
       required: true
   - type: textarea

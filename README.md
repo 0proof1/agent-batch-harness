@@ -85,7 +85,8 @@ standard input, so an existing CLI does not need a dedicated adapter first.
 
 ## Current Status
 
-This is an early open-source scaffold. It already supports:
+The current pre-release is **0.1.0a2**. This is an early open-source scaffold
+that already supports:
 
 - `plan`: create `_batches/manifest.tsv` from an item list;
 - `build-prompts`: render one prompt per shard;
@@ -148,8 +149,9 @@ agent-batch --help
 ```
 
 On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`; commands
-after activation are otherwise the same. To install a built wheel instead of a
-checkout, run `python -m pip install path/to/agent-batch-harness-*.whl`.
+after activation are otherwise the same. To install the 0.1.0a2 wheel instead
+of a checkout, run
+`python -m pip install path/to/agent_batch_harness-0.1.0a2-py3-none-any.whl`.
 
 Without installing:
 
